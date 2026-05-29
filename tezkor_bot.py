@@ -1,6 +1,6 @@
 import logging
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
 TOKEN = os.environ.get("TOKEN", "8814913893:AAG2T7ZVb93Rgu5jjqXrbM7EA9KIvlYXaGE")
@@ -11,41 +11,30 @@ CARD_NAME = "Abdumalikov A"
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Xizmat sozlamalari
 SERVICES = {
     "obunachi": {
         "name": "👥 Obunachi",
-        "packages": [
-            {"id": "ob_1k", "amount": "1 000", "price": 15000},
-            {"id": "ob_3k", "amount": "3 000", "price": 45000},
-            {"id": "ob_5k", "amount": "5 000", "price": 75000},
-            {"id": "ob_10k", "amount": "10 000", "price": 150000},
-        ]
+        "emoji": "👥",
+        "min_qty": 1000,
+        "price_per_unit": 15,  # 1 obunachi = 15 so'm
+        "recommended": [1000, 3000, 5000, 10000],
     },
     "like": {
         "name": "❤️ Like",
-        "packages": [
-            {"id": "lk_1k", "amount": "1 000", "price": 5000},
-            {"id": "lk_3k", "amount": "3 000", "price": 15000},
-            {"id": "lk_5k", "amount": "5 000", "price": 25000},
-            {"id": "lk_10k", "amount": "10 000", "price": 50000},
-            {"id": "lk_20k", "amount": "20 000", "price": 100000},
-        ]
+        "emoji": "❤️",
+        "min_qty": 1000,
+        "price_per_unit": 5,  # 1 like = 5 so'm
+        "recommended": [1000, 3000, 5000, 10000, 20000],
     },
     "prosmotr": {
         "name": "👀 Prosmotr",
-        "packages": [
-            {"id": "pr_1k", "amount": "1 000", "price": 3000},
-            {"id": "pr_3k", "amount": "3 000", "price": 9000},
-            {"id": "pr_5k", "amount": "5 000", "price": 15000},
-            {"id": "pr_10k", "amount": "10 000", "price": 25000},
-        ]
+        "emoji": "👀",
+        "min_qty": 1000,
+        "price_per_unit": 3,  # 1 prosmotr = 3 so'm
+        "recommended": [1000, 3000, 5000, 10000],
     },
 }
-
-ALL_PACKAGES = {}
-for svc_key, svc in SERVICES.items():
-    for pkg in svc["packages"]:
-        ALL_PACKAGES[pkg["id"]] = {**pkg, "service": svc_key, "service_name": svc["name"]}
 
 user_states = {}
 
@@ -60,17 +49,40 @@ def main_kb():
         [InlineKeyboardButton("❓ Yordam", callback_data="help")],
     ])
 
+def service_kb(svc_key):
+    svc = SERVICES[svc_key]
+    keyboard = []
+    
+    # Tavsiya etilgan miqdorlar
+    rec_row = []
+    for qty in svc["recommended"]:
+        price = qty * svc["price_per_unit"]
+        rec_row.append(InlineKeyboardButton(
+            f"{fmt(qty)} — {fmt(price)} so'm",
+            callback_data=f"qty_{svc_key}_{qty}"
+        ))
+        if len(rec_row) == 2:
+            keyboard.append(rec_row)
+            rec_row = []
+    if rec_row:
+        keyboard.append(rec_row)
+    
+    keyboard.append([InlineKeyboardButton("✏️ O'zim kiritaman", callback_data=f"custom_{svc_key}")])
+    keyboard.append([InlineKeyboardButton("🔙 Orqaga", callback_data="main")])
+    return InlineKeyboardMarkup(keyboard)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_states.pop(user_id, None)
-    text = (
-        "🚀 *Tezkor SMM Xizmati*\n\n"
-        "Instagram xizmatlarimiz:\n"
+    await update.message.reply_text(
+        "🚀 *Tezkor Obuna — SMM Xizmati*\n\n"
+        "Instagram xizmatlari:\n"
         "👥 Obunachi | ❤️ Like | 👀 Prosmotr\n\n"
         "✅ Tezkor • 🛡 Xavfsiz • 🔄 Kafolat\n\n"
-        "Xizmat tanlang:"
+        "Xizmat tanlang 👇",
+        reply_markup=main_kb(),
+        parse_mode="Markdown"
     )
-    await update.message.reply_text(text, reply_markup=main_kb(), parse_mode="Markdown")
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -81,40 +93,66 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "main":
         user_states.pop(user_id, None)
         await query.edit_message_text(
-            "🚀 *Tezkor SMM Xizmati*\n\nXizmat tanlang:",
-            reply_markup=main_kb(), parse_mode="Markdown"
+            "🚀 *Tezkor Obuna — SMM Xizmati*\n\nXizmat tanlang 👇",
+            reply_markup=main_kb(),
+            parse_mode="Markdown"
         )
 
     elif data.startswith("svc_"):
         svc_key = data[4:]
-        svc = SERVICES.get(svc_key, {})
-        keyboard = []
-        for pkg in svc.get("packages", []):
-            keyboard.append([InlineKeyboardButton(
-                f"{pkg['amount']} {svc['name'].split()[0]} — {fmt(pkg['price'])} so'm",
-                callback_data=f"pkg_{pkg['id']}"
-            )])
-        keyboard.append([InlineKeyboardButton("🔙 Orqaga", callback_data="main")])
+        svc = SERVICES[svc_key]
+        price_per = svc["price_per_unit"]
+        min_qty = svc["min_qty"]
+        
+        text = (
+            f"*{svc['name']}*\n\n"
+            f"💰 1 ta narxi: *{price_per} so'm*\n"
+            f"📦 Minimum zakaz: *{fmt(min_qty)} ta*\n\n"
+            f"Tavsiya etilgan paketlar yoki o'z miqdoringizni kiriting:"
+        )
+        await query.edit_message_text(text, reply_markup=service_kb(svc_key), parse_mode="Markdown")
+
+    elif data.startswith("qty_"):
+        # Tayyor paket tanlandi
+        parts = data.split("_")
+        svc_key = parts[1]
+        qty = int(parts[2])
+        svc = SERVICES[svc_key]
+        price = qty * svc["price_per_unit"]
+        
+        user_states[user_id] = {
+            "step": "waiting_link",
+            "svc_key": svc_key,
+            "qty": qty,
+            "price": price
+        }
+        
         await query.edit_message_text(
-            f"*{svc['name']}*\n\nPaket tanlang:",
-            reply_markup=InlineKeyboardMarkup(keyboard),
+            f"*{svc['name']}* — {fmt(qty)} ta\n"
+            f"💰 Jami: *{fmt(price)} so'm*\n\n"
+            f"📎 Instagram havolangizni yuboring:\n"
+            f"_(Masalan: https://instagram.com/username)_",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔙 Orqaga", callback_data=f"svc_{svc_key}")
+            ]]),
             parse_mode="Markdown"
         )
 
-    elif data.startswith("pkg_"):
-        pkg_id = data[4:]
-        pkg = ALL_PACKAGES.get(pkg_id)
-        if not pkg:
-            return
-        user_states[user_id] = {"step": "waiting_link", "pkg_id": pkg_id}
-        svc_name = SERVICES[pkg["service"]]["name"]
+    elif data.startswith("custom_"):
+        svc_key = data[7:]
+        svc = SERVICES[svc_key]
+        user_states[user_id] = {
+            "step": "waiting_qty",
+            "svc_key": svc_key,
+        }
         await query.edit_message_text(
-            f"*{svc_name}* — {pkg['amount']}\n"
-            f"💰 Narx: *{fmt(pkg['price'])} so'm*\n\n"
-            f"📎 Instagram profilingiz yoki post havolasini yuboring:\n"
-            f"_(Masalan: https://instagram.com/username)_",
+            f"*{svc['name']}*\n\n"
+            f"💰 1 ta narxi: *{svc['price_per_unit']} so'm*\n"
+            f"📦 Minimum: *{fmt(svc['min_qty'])} ta*\n\n"
+            f"✏️ Nechta kerakligini yozing:\n"
+            f"_(Masalan: 1500)_",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔙 Orqaga", callback_data=f"svc_{pkg['service']}")
+                InlineKeyboardButton("🔙 Orqaga", callback_data=f"svc_{svc_key}")
             ]]),
             parse_mode="Markdown"
         )
@@ -123,11 +161,13 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             "❓ *Yordam*\n\n"
             "1️⃣ Xizmat tanlang\n"
-            "2️⃣ Instagram havolangizni yuboring\n"
-            "3️⃣ Kartaga to'lov qiling\n"
-            "4️⃣ Chek rasmini yuboring\n"
-            "5️⃣ Admin tasdiqlaydi ✅\n\n"
-            "📞 Muammo: @alibekadmin",
+            "2️⃣ Miqdor tanlang yoki kiriting\n"
+            "3️⃣ Instagram havolangizni yuboring\n"
+            "4️⃣ Kartaga to'lov qiling\n"
+            "5️⃣ Chek rasmini yuboring\n"
+            "6️⃣ Admin tasdiqlaydi ✅\n\n"
+            "📞 Muammo: @anorbekovich\n"
+            "📱 77-452-11-04",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔙 Orqaga", callback_data="main")
             ]]),
@@ -140,8 +180,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         is_confirm = data.startswith("confirm_")
-        parts = data.split("_", 2)
-        client_id = int(parts[1])
+        client_id = int(data.split("_")[1])
         status = "✅ TASDIQLANDI" if is_confirm else "❌ RAD ETILDI"
 
         try:
@@ -163,7 +202,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if is_confirm:
                 msg = "✅ *Buyurtmangiz tasdiqlandi!*\n\nXizmat boshlanmoqda... Tez orada bajariladi! 🚀"
             else:
-                msg = "❌ *Buyurtmangiz rad etildi.*\n\nTo'lov tasdiqlanmadi. Qayta urinib ko'ring yoki @alibekadmin bilan bog'laning."
+                msg = "❌ *Buyurtmangiz rad etildi.*\n\nTo'lov tasdiqlanmadi. Qayta urinib ko'ring yoki @anorbekovich bilan bog'laning."
             await context.bot.send_message(client_id, msg, parse_mode="Markdown")
         except Exception as e:
             logger.error(f"Mijozga xabar xato: {e}")
@@ -171,8 +210,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     state = user_states.get(user_id)
+    text = update.message.text.strip()
 
-    if not state or state.get("step") != "waiting_link":
+    if not state:
         await update.message.reply_text(
             "Boshlash uchun /start bosing 👇",
             reply_markup=InlineKeyboardMarkup([[
@@ -181,49 +221,93 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    link = update.message.text.strip()
-    if "instagram.com" not in link and "instagr.am" not in link:
+    step = state.get("step")
+
+    # === MIQDOR KUTILMOQDA ===
+    if step == "waiting_qty":
+        svc_key = state["svc_key"]
+        svc = SERVICES[svc_key]
+        
+        # Faqat raqam tekshirish
+        if not text.isdigit():
+            await update.message.reply_text(
+                "⚠️ Faqat raqam kiriting!\nMasalan: *1500*",
+                parse_mode="Markdown"
+            )
+            return
+        
+        qty = int(text)
+        
+        # Minimum tekshirish
+        if qty < svc["min_qty"]:
+            await update.message.reply_text(
+                f"⚠️ Minimum zakaz: *{fmt(svc['min_qty'])} ta*\n"
+                f"Siz {fmt(qty)} ta kiritdingiz.\n\n"
+                f"Kamida *{fmt(svc['min_qty'])}* ta kiriting:",
+                parse_mode="Markdown"
+            )
+            return
+        
+        price = qty * svc["price_per_unit"]
+        user_states[user_id]["qty"] = qty
+        user_states[user_id]["price"] = price
+        user_states[user_id]["step"] = "waiting_link"
+        
         await update.message.reply_text(
-            "⚠️ *Noto'g'ri havola!*\n\n"
-            "Instagram havolasi bo'lishi kerak.\n"
-            "Masalan: https://instagram.com/username",
+            f"✅ *{svc['name']}* — {fmt(qty)} ta\n"
+            f"💰 Jami: *{fmt(price)} so'm*\n\n"
+            f"📎 Instagram havolangizni yuboring:\n"
+            f"_(Masalan: https://instagram.com/username)_",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔙 Orqaga", callback_data=f"svc_{svc_key}")
+            ]])
+        )
+
+    # === HAVOLA KUTILMOQDA ===
+    elif step == "waiting_link":
+        if "instagram.com" not in text and "instagr.am" not in text:
+            await update.message.reply_text(
+                "⚠️ *Instagram havolasi bo'lishi kerak!*\n\n"
+                "Masalan: https://instagram.com/username",
+                parse_mode="Markdown"
+            )
+            return
+
+        svc_key = state["svc_key"]
+        svc = SERVICES[svc_key]
+        qty = state["qty"]
+        price = state["price"]
+
+        user_states[user_id]["link"] = text
+        user_states[user_id]["step"] = "waiting_payment"
+
+        await update.message.reply_text(
+            f"✅ Havola qabul qilindi!\n\n"
+            f"📦 *{svc['name']}* — {fmt(qty)} ta\n"
+            f"🔗 {text}\n\n"
+            f"━━━━━━━━━━━━━━━━\n"
+            f"💳 *To'lov rekvizitlari:*\n"
+            f"Karta: `{CARD_NUMBER}`\n"
+            f"Egasi: *{CARD_NAME}*\n"
+            f"Summa: *{fmt(price)} so'm*\n"
+            f"━━━━━━━━━━━━━━━━\n\n"
+            f"💸 To'lovni amalga oshirib, *chek rasmini* yuboring! 📸",
             parse_mode="Markdown"
         )
-        return
-
-    pkg_id = state["pkg_id"]
-    pkg = ALL_PACKAGES[pkg_id]
-    svc_name = SERVICES[pkg["service"]]["name"]
-    user_states[user_id]["link"] = link
-    user_states[user_id]["step"] = "waiting_payment"
-
-    await update.message.reply_text(
-        f"✅ Havola qabul qilindi!\n\n"
-        f"📦 *{svc_name}* — {pkg['amount']}\n"
-        f"🔗 {link}\n\n"
-        f"━━━━━━━━━━━━━━━━\n"
-        f"💳 *To'lov rekvizitlari:*\n"
-        f"Karta: `{CARD_NUMBER}`\n"
-        f"Egasi: *{CARD_NAME}*\n"
-        f"Summa: *{fmt(pkg['price'])} so'm*\n"
-        f"━━━━━━━━━━━━━━━━\n\n"
-        f"💸 To'lovni amalga oshirib, *chek rasmini* yuboring! 📸",
-        parse_mode="Markdown"
-    )
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     state = user_states.get(user_id)
 
     if not state or state.get("step") != "waiting_payment":
-        await update.message.reply_text(
-            "Boshlash uchun /start bosing 👇"
-        )
+        await update.message.reply_text("Boshlash uchun /start bosing 👇")
         return
 
-    pkg_id = state["pkg_id"]
-    pkg = ALL_PACKAGES[pkg_id]
-    svc_name = SERVICES[pkg["service"]]["name"]
+    svc_key = state["svc_key"]
+    svc = SERVICES[svc_key]
+    qty = state["qty"]
+    price = state["price"]
     link = state.get("link", "—")
     user = update.effective_user
     username = f"@{user.username}" if user.username else "username yo'q"
@@ -233,14 +317,14 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👤 {user.full_name}\n"
         f"📱 {username}\n"
         f"🆔 `{user_id}`\n\n"
-        f"📦 *{svc_name}* — {pkg['amount']}\n"
+        f"📦 *{svc['name']}* — {fmt(qty)} ta\n"
         f"🔗 {link}\n"
-        f"💰 *{fmt(pkg['price'])} so'm*"
+        f"💰 *{fmt(price)} so'm*"
     )
 
     admin_kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Tasdiqlash", callback_data=f"confirm_{user_id}_ok"),
-        InlineKeyboardButton("❌ Rad etish", callback_data=f"reject_{user_id}_no"),
+        InlineKeyboardButton("✅ Tasdiqlash", callback_data=f"confirm_{user_id}"),
+        InlineKeyboardButton("❌ Rad etish", callback_data=f"reject_{user_id}"),
     ]])
 
     photo = update.message.photo[-1].file_id
@@ -253,9 +337,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=admin_kb,
             parse_mode="Markdown"
         )
-        logger.info(f"Admin ga yuborildi: user {user_id}")
+        logger.info(f"Adminga yuborildi: user {user_id}, {svc['name']} {qty} ta, {price} so'm")
     except Exception as e:
-        logger.error(f"Admin ga yuborishda XATO: {e}")
+        logger.error(f"Adminga yuborishda XATO: {e}")
 
     user_states.pop(user_id, None)
     await update.message.reply_text(
@@ -274,5 +358,5 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    logger.info("Bot ishga tushdi!")
+    logger.info("✅ Tezkor Obuna Bot ishga tushdi!")
     app.run_polling(drop_pending_updates=True)
