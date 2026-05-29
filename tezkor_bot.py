@@ -175,48 +175,44 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_keyboard(), parse_mode="Markdown"
         )
 
-    elif data.startswith("admin_confirm_"):
-        # Admin tasdiqladi
+    elif data.startswith("admin_confirm_") or data.startswith("admin_reject_"):
         if user_id != ADMIN_ID:
+            await query.answer("Siz admin emassiz!", show_alert=True)
             return
-        order_id = data[14:]
-        await query.edit_message_text(
-            query.message.text + "\n\n✅ *TASDIQLANDI*",
-            parse_mode="Markdown"
-        )
+        
+        is_confirm = data.startswith("admin_confirm_")
+        order_id = data[14:] if is_confirm else data[13:]
+        status_text = "✅ TASDIQLANDI" if is_confirm else "❌ RAD ETILDI"
+        
+        # Xabar turini tekshir (rasm yoki matn)
+        try:
+            if query.message.photo:
+                old_caption = query.message.caption or ""
+                await query.edit_message_caption(
+                    caption=old_caption + f"\n\n{status_text}",
+                    parse_mode="Markdown"
+                )
+            else:
+                old_text = query.message.text or ""
+                await query.edit_message_text(
+                    old_text + f"\n\n{status_text}",
+                    parse_mode="Markdown"
+                )
+        except Exception as e:
+            logging.error(f"Xabar tahrirlashda xato: {e}")
+            await query.answer(status_text)
+        
         # Mijozga xabar
         try:
             parts = order_id.split("_")
             client_id = int(parts[0])
-            await context.bot.send_message(
-                client_id,
-                "✅ *Buyurtmangiz tasdiqlandi!*\n\n"
-                "Xizmat yaqin orada boshlanadi.\n"
-                "Rahmat! 🙏",
-                parse_mode="Markdown"
-            )
+            if is_confirm:
+                msg = "✅ *Buyurtmangiz tasdiqlandi!*\n\nXizmat yaqin orada boshlanadi.\nRahmat! 🙏"
+            else:
+                msg = "❌ *Buyurtmangiz rad etildi.*\n\nTo'lov tasdiqlanmadi. Chekni qayta yuboring yoki admin bilan bog'laning."
+            await context.bot.send_message(client_id, msg, parse_mode="Markdown")
         except Exception as e:
             logging.error(f"Mijozga xabar yuborishda xato: {e}")
-
-    elif data.startswith("admin_reject_"):
-        if user_id != ADMIN_ID:
-            return
-        order_id = data[13:]
-        await query.edit_message_text(
-            query.message.text + "\n\n❌ *RAD ETILDI*",
-            parse_mode="Markdown"
-        )
-        try:
-            parts = order_id.split("_")
-            client_id = int(parts[0])
-            await context.bot.send_message(
-                client_id,
-                "❌ *Buyurtmangiz rad etildi.*\n\n"
-                "To'lov tasdiqlanmadi. Chekni qayta yuboring yoki admin bilan bog'laning.",
-                parse_mode="Markdown"
-            )
-        except Exception as e:
-            logging.error(f"Rad xabari yuborishda xato: {e}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
