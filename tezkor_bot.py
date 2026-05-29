@@ -16,6 +16,8 @@ SERVICES = {
         "name": "👥 Obunachi",
         "min_qty": 1000,
         "price_per_unit": 15,
+        "price_per_unit_bulk": 15,
+        "bulk_from": 999999,
         "recommended": [1000, 3000, 5000, 10000],
         "bonus_from": 5000,
         "bonus_pct": 10,
@@ -24,6 +26,8 @@ SERVICES = {
         "name": "❤️ Like",
         "min_qty": 1000,
         "price_per_unit": 5,
+        "price_per_unit_bulk": 3,
+        "bulk_from": 10000,
         "recommended": [1000, 3000, 5000, 10000, 20000],
         "bonus_from": 10000,
         "bonus_pct": 10,
@@ -32,6 +36,8 @@ SERVICES = {
         "name": "👀 Prosmotr",
         "min_qty": 1000,
         "price_per_unit": 3,
+        "price_per_unit_bulk": 3,
+        "bulk_from": 10000,
         "recommended": [1000, 3000, 5000, 10000],
         "bonus_from": 10000,
         "bonus_pct": 10,
@@ -42,6 +48,13 @@ user_states = {}
 
 def fmt(p):
     return f"{p:,}".replace(",", " ")
+
+def get_price(svc, qty):
+    """Narxni hisoblash - 10K dan yuqori bo'lsa arzonroq"""
+    if qty >= svc["bulk_from"]:
+        return qty * svc["price_per_unit_bulk"]
+    else:
+        return qty * svc["price_per_unit"]
 
 def get_bonus(svc, qty):
     if qty >= svc["bonus_from"]:
@@ -73,7 +86,7 @@ def service_kb(svc_key):
     keyboard = []
     rec_row = []
     for qty in svc["recommended"]:
-        price = qty * svc["price_per_unit"]
+        price = get_price(svc, qty)
         bonus = get_bonus(svc, qty)
         label = f"{fmt(qty)} — {fmt(price)} so'm"
         if bonus > 0:
@@ -133,7 +146,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         svc_key = parts[1]
         qty = int(parts[2])
         svc = SERVICES[svc_key]
-        price = qty * svc["price_per_unit"]
+        price = get_price(svc, qty)
         bonus = get_bonus(svc, qty)
         user_states[user_id] = {"step": "waiting_link", "svc_key": svc_key, "qty": qty, "price": price, "bonus": bonus}
         text = order_text(svc, qty, price) + "\n\n📎 Instagram havolangizni yuboring:\n_(Masalan: https://instagram.com/username)_"
@@ -217,7 +230,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown"
             )
             return
-        price = qty * svc["price_per_unit"]
+        price = get_price(svc, qty)
         bonus = get_bonus(svc, qty)
         user_states[user_id].update({"qty": qty, "price": price, "bonus": bonus, "step": "waiting_link"})
         text_out = "✅ " + order_text(svc, qty, price) + "\n\n📎 Instagram havolangizni yuboring:\n_(Masalan: https://instagram.com/username)_"
